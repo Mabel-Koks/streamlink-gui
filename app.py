@@ -129,8 +129,6 @@ class MainWindow(QMainWindow):
     def __init__(self, connection: Connection):
         super().__init__()
 
-        print(self)
-
         self.setWindowTitle("My App")
         self._connection = connection
         self._layout = QGridLayout()

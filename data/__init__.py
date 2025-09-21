@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, NamedTuple, Self
+from typing import NamedTuple, Self, Any
 from pathlib import Path
-from subprocess import check_output
-
 import json
+from subprocess import run
 
 
 class Source(Enum):
@@ -35,8 +34,16 @@ class RegisteredStream(NamedTuple):
     icon: str | None = None
 
     def start(self):
-        result = check_output(["streamlink", self.full_URI, "best"])
-        return result
+        try:
+            run(
+                [
+                    "streamlink",
+                    self.full_URI,
+                    "best",
+                ]
+            )
+        except Exception as e:
+            pass  # TODO: add custom exception so we can handle it in the gui
 
     @property
     def full_URI(self):
