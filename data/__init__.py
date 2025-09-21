@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from enum import Enum, auto
+from enum import Enum
 from typing import Any, NamedTuple, Self
 from pathlib import Path
+from subprocess import check_output
 
 import json
 
@@ -31,6 +32,11 @@ class RegisteredStream(NamedTuple):
     display_name: str
     source: Source
     stream_name: str
+    icon: str | None = None
+
+    def start(self):
+        result = check_output(["streamlink", self.full_URI, "best"])
+        return result
 
     @property
     def full_URI(self):
@@ -41,13 +47,45 @@ class RegisteredStream(NamedTuple):
         sname = config["stream_name"]
         dname = config.get("display_name", sname)
         source = Source.from_string(config["source"])
-        return cls(display_name=dname, source=source, stream_name=sname)
+        icon = config.get("icon", None)
+        return cls(display_name=dname, source=source, stream_name=sname, icon=icon)
+
+    @classmethod
+    def from_url(cls, url, display_name=None, icon_path=None):
+        url = url.lower()
+        result = {}
+        match True:
+            case _ if "twitch" in url:
+                result["stream_name"] = url.split("/")[-1]
+                result["source"] = "twitch"
+            case _ if "youtube" in url:
+                result["stream_name"] = url.split("@")[-1]
+                result["source"] = "youtube"
+            case _:
+                raise ValueError(f"Could not parse url `{url}`")
+
+        if icon_path is not None:
+            dest = Path(__file__).parent / (result["stream_name"] + ".png")
+            Path(icon_path).rename(dest)
+            result["icon"] = dest.name
+
+        if display_name is not None:
+            result["display_name"] = display_name
+
+        return cls.from_config(result)
 
     def as_config(self) -> dict[str, str]:
         dct = {"stream_name": self.stream_name, "source": self.source.value}
         if self.display_name != self.stream_name:
             dct["display_name"] = self.display_name
+        if self.icon is not None:
+            dct["icon"] = self.icon
         return dct
+
+    def get_icon_path(self) -> str | None:
+        if self.icon is not None:
+            return str(Path(__file__).parent / self.icon)
+        return None
 
 
 class Connection(ABC):
@@ -90,3 +128,7 @@ class JSONConnection(Connection):
     def finish(self):
         with self._sourcepath.open("w") as f:
             json.dump([stream.as_config() for stream in self._streams], f)
+
+
+def default_icon():
+    return str(Path(__file__).parent / "default_icon.png")

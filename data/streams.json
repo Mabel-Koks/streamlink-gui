@@ -1,17 +1,1 @@
-[
-    {
-        "display_name": "ZombieCleo",
-        "source": "Twitch",
-        "stream_name": "zombiecleo"
-    },
-    {
-        "display_name": "TangoTek",
-        "source": "Twitch",
-        "stream_name": "tangotek"
-    },
-    {
-        "display_name": "Dave",
-        "source": "Twitch",
-        "stream_name": "dave_aoe"
-    }
-]
+[{"stream_name": "zombiecleo", "source": "twitch", "display_name": "ZombieCleo", "icon": "zombiecleo_icon.png"}, {"stream_name": "tangotek", "source": "twitch", "display_name": "TangoTek", "icon": "tango_icon.png"}, {"stream_name": "dave_aoe", "source": "twitch", "display_name": "Dave"}, {"stream_name": "impulsesv", "source": "twitch", "display_name": "Impulse", "icon": "impulsesv.png"}]
