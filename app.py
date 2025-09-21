@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
     def __init__(self, connection: Connection):
         super().__init__()
 
-        self.setWindowTitle("My App")
+        self.setWindowTitle("Streamlink GUI")
         self._connection = connection
         self._layout = QGridLayout()
         self._container = QWidget()

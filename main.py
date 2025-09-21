@@ -8,7 +8,11 @@ from .data import JSONConnection
 
 app = QApplication(sys.argv)
 
-connection = JSONConnection(Path(sys.argv[1]))
+try:
+    json_path = Path(sys.argv[1])
+except IndexError:
+    json_path = Path(__file__).parent / "data" / "streams.json"
+connection = JSONConnection(json_path)
 window = MainWindow(connection)
 window.show()
 
