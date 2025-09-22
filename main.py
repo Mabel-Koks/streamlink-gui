@@ -16,7 +16,7 @@ try:
 except IndexError:
     entrypoint = Path(__file__).parent / "data" / "streams.json"
 
-suffix = entrypoint.split(".")[-1]
+suffix = entrypoint.name.split(".")[-1]
 
 if suffix == "json":
     connection = JSONConnection(entrypoint)
