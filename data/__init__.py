@@ -155,7 +155,9 @@ class RegisteredStream(NamedTuple):
             Path(icon_path).rename(dest)
             result["icon"] = dest.name
 
-        if display_name is not None:
+        if display_name is None or display_name == "":
+            result["display_name"] = result["stream_name"]
+        else:
             result["display_name"] = display_name
 
         return cls.from_config(result)
@@ -177,6 +179,12 @@ class RegisteredStream(NamedTuple):
         if self.icon is not None:
             return str(Path(__file__).parent / self.icon)
         return None
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return NotImplemented
+
+        return self.full_URI == other.full_URI
 
 
 class Connection(ABC):
@@ -243,4 +251,4 @@ class JSONConnection(Connection):
 
     def finish(self):
         with self._sourcepath.open("w") as f:
-            json.dump([stream.as_config() for stream in self._streams], f)
+            json.dump([stream.as_config() for stream in self._streams], f, indent=4)

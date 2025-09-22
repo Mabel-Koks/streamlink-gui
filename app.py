@@ -8,10 +8,60 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QFileDialog,
+    QVBoxLayout,
+    QPlainTextEdit,
 )
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import Qt
 from .data import RegisteredStream, Connection
+from .data.exceptions import NoStreamError
+
+
+class LogDialog(QDialog):
+
+    def __init__(self, error, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Logs")
+
+        layout = QVBoxLayout()
+
+        text = QLabel("Logs:")
+        layout.addWidget(text)
+
+        textbox = QPlainTextEdit(f"ERROR: {str(error)}")
+        textbox.setReadOnly(True)
+        layout.addWidget(textbox)
+
+        button = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        layout.addWidget(button)
+        button.rejected.connect(self.reject)
+
+        self.setLayout(layout)
+
+
+class ErrorDialog(QDialog):
+
+    def __init__(self, error_message, error, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Error...")
+
+        self._error = error
+
+        layout = QVBoxLayout()
+        text = QLabel(error_message)
+        layout.addWidget(text)
+
+        button = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        more_info_button = QPushButton("Debug")
+        more_info_button.clicked.connect(self._info_button_clicked)
+        button.addButton(more_info_button, QDialogButtonBox.ButtonRole.ActionRole)
+        button.rejected.connect(self.reject)
+        layout.addWidget(button)
+
+        self.setLayout(layout)
+
+    def _info_button_clicked(self):
+        LogDialog(self._error).exec()
 
 
 class NewStreamDialog(QDialog):
@@ -101,7 +151,6 @@ class NewStreamButton(QPushButton):
 
     def click_action(self):
         dialog_box = NewStreamDialog(self._connection, self.parent())
-        print(self.parent())
         if dialog_box.exec():
             self._update_fn()
 
@@ -126,7 +175,10 @@ class StreamButton(QPushButton):
         painter.drawPixmap(event.rect(), self._pixmap)
 
     def click_action(self):
-        self._stream.start()
+        try:
+            self._stream.start()
+        except NoStreamError as err:
+            ErrorDialog("The stream is unavailable.", err, parent=self).exec()
 
     def _create_pixmap(self):
         if (icon_path := self._stream.get_icon_path()) is not None:
