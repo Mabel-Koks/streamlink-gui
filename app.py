@@ -11,10 +11,16 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 from PyQt6.QtCore import QSize, Qt
-from .data import RegisteredStream, Connection, default_icon
+from .data import RegisteredStream, Connection
 
 
 class NewStreamDialog(QDialog):
+    """Dialog box for registering a new stream.
+
+    Args:
+        connection (Connection): connection to the data, to register the new stream to.
+        parent (QWidget | None): parent widget, optional. Defaults to None.
+    """
 
     def __init__(self, connection: Connection, parent=None):
         super().__init__(parent)
@@ -60,6 +66,11 @@ class NewStreamDialog(QDialog):
 
 
 class NewFileDialog(QPushButton):
+    """Button that opens a file dialog to select an icon. Saves selected file in :attr:`_file`
+
+    Args:
+        parent (QWidget | None): parent widget, optional. Defaults to None.
+    """
 
     def __init__(self, parent=None):
         super().__init__("select icon", parent=parent)
@@ -75,6 +86,12 @@ class NewFileDialog(QPushButton):
 
 
 class NewStreamButton(QPushButton):
+    """Button that creats a dialog for registering a new stream.
+
+    Args:
+        connection (Connection): connection to the data, to register the new stream to.
+        parent (QWidget | None): parent widget, optional. Defaults to None.
+    """
 
     def __init__(self, connection, update_fn, parent=None):
         super().__init__("Add Stream!", parent=parent)
@@ -90,8 +107,15 @@ class NewStreamButton(QPushButton):
 
 
 class StreamButton(QPushButton):
+    """GUI representation of a :class:`RegisteredStream` object.
+
+    Args:
+        stream (RegisteredStream): the object it represents.
+        parent (QWidget | None): parent widget, optional. Defaults to None.
+    """
 
     def __init__(self, stream: RegisteredStream, parent=None):
+
         super().__init__(stream.display_name, parent=parent)
         self._stream = stream
         self._pixmap = self._create_pixmap()
@@ -126,6 +150,12 @@ class StreamButton(QPushButton):
 
 
 class MainWindow(QMainWindow):
+    """Main window of the GUI.
+
+    Args:
+        connection (Connection): connection to the underlying data, used for saving and loading.
+    """
+
     def __init__(self, connection: Connection):
         super().__init__()
 
@@ -161,6 +191,7 @@ class MainWindow(QMainWindow):
             widget.deleteLater()  # type: ignore
 
     def update_streams(self):
+        """Redraw the layout with updated registered streams."""
         self._reset_layout()
         self._set_layout()
 
