@@ -8,6 +8,30 @@ from subprocess import run, CalledProcessError
 from .exceptions import ParseError, NoStreamError, UnsupportedError, ImpossibleError
 
 
+def get_file_path(filename: str) -> Path:
+    """Build the full file path from a filename.
+
+    Args:
+        filename (str): Name of the file to be found.
+
+    Returns:
+        Path: Full, absolute path to the file.
+    """
+    suffix = filename.split(".")[1]
+    match suffix:
+        case "png" | "jpg" | "jpeg" | "svg":
+            fldr = "imgs"
+        case "json" | "sql":
+            fldr = "db"
+        case _:
+            fldr = "other"
+
+    full_path = Path(__file__).parent / "files" / fldr / filename
+    if not full_path.exists():
+        raise FileNotFoundError(f"{filename} @ {full_path} does not exist.")
+    return full_path
+
+
 class Source(Enum):
     """Set of supported stream sources."""
 
@@ -151,7 +175,7 @@ class RegisteredStream(NamedTuple):
                 raise ParseError(f"Could not parse url `{url}`", (url, cls))
 
         if icon_path is not None:
-            dest = Path(__file__).parent / (result["stream_name"] + ".png")
+            dest = get_file_path(result["stream_name"] + ".png")
             Path(icon_path).rename(dest)
             result["icon"] = dest.name
 
@@ -177,7 +201,7 @@ class RegisteredStream(NamedTuple):
 
     def get_icon_path(self) -> str | None:
         if self.icon is not None:
-            return str(Path(__file__).parent / self.icon)
+            return str(get_file_path(self.icon))
         return None
 
     def __eq__(self, other):

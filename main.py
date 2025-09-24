@@ -5,20 +5,20 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 
 from .app import MainWindow
-from .data import JSONConnection
+from .data import JSONConnection, get_file_path
 from .data.exceptions import UnsupportedError
 
 # start application
 app = QApplication(sys.argv)
 app.setApplicationName("Streamlink GUI")
-icon = QIcon(str(Path(__file__).parent / "data" / "streamlink_icon.png"))
+icon = QIcon(str(get_file_path("streamlink_icon.png")))
 app.setWindowIcon(icon)
 
 # parse backend
 try:
     entrypoint = Path(sys.argv[1])
 except IndexError:
-    entrypoint = Path(__file__).parent / "data" / "streams.json"
+    entrypoint = get_file_path("streams.json")
 
 suffix = entrypoint.name.split(".")[-1]
 

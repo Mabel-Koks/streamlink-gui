@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 from PyQt6.QtCore import Qt
 from .data import RegisteredStream, Connection
-from .data.exceptions import NoStreamError
+from .data.exceptions import NoStreamError, ParseError
 
 
 class LogDialog(QDialog):
@@ -92,7 +92,7 @@ class NewStreamDialog(QDialog):
         layout.addWidget(self._URL_field, 2, 1, 1, 2)
 
         icon_msg = QLabel("Icon:")
-        self._icon_button = NewFileDialog(self)
+        self._icon_button = FileDialogButton("select icon", parent=self)
         layout.addWidget(icon_msg, 3, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
         layout.addWidget(self._icon_button, 3, 1, 1, 2)
 
@@ -115,15 +115,16 @@ class NewStreamDialog(QDialog):
         self.accept()
 
 
-class NewFileDialog(QPushButton):
+class FileDialogButton(QPushButton):
     """Button that opens a file dialog to select an icon. Saves selected file in :attr:`_file`
 
     Args:
+        button_text (str): text on the button.
         parent (QWidget | None): parent widget, optional. Defaults to None.
     """
 
-    def __init__(self, parent=None):
-        super().__init__("select icon", parent=parent)
+    def __init__(self, button_text, parent=None):
+        super().__init__(button_text, parent=parent)
         self.clicked.connect(self.click_action)
         self._file = None
 
@@ -136,7 +137,7 @@ class NewFileDialog(QPushButton):
 
 
 class NewStreamButton(QPushButton):
-    """Button that creats a dialog for registering a new stream.
+    """Button that creates a dialog for registering a new stream.
 
     Args:
         connection (Connection): connection to the data, to register the new stream to.
@@ -201,6 +202,24 @@ class StreamButton(QPushButton):
         return self._pixmap.size()
 
 
+class PlayStreamButton(QPushButton):
+
+    def __init__(self, source, parent=None):
+        super().__init__("Play", parent)
+        self._source = source
+        self.clicked.connect(self.click_action)
+
+    def click_action(self):
+        url = self._source.text()
+        try:
+            stream = RegisteredStream.from_url(url)
+            stream.start()
+        except ParseError as err:
+            ErrorDialog("Could not parse url", err, parent=self).exec()
+        except NoStreamError as err:
+            ErrorDialog("The stream is unavailable", err, parent=self).exec()
+
+
 class MainWindow(QMainWindow):
     """Main window of the GUI.
 
@@ -223,12 +242,17 @@ class MainWindow(QMainWindow):
         streams = self._connection.get_streams()
         n_rows = len(streams) // 5 + ((len(streams) % 5) > 0)
         n_cols = len(streams) // n_rows + ((len(streams) % n_rows) > 0)
+
         add_stream_button = NewStreamButton(
             self._connection, self.update_streams, parent=self
         )
-        self._layout.addWidget(
-            add_stream_button, 0, 0, 1, n_cols, Qt.AlignmentFlag.AlignHCenter
-        )
+        self._layout.addWidget(add_stream_button, 0, 0)
+
+        play_stream = QLineEdit()
+        play_stream_button = PlayStreamButton(source=play_stream, parent=self)
+        self._layout.addWidget(play_stream, 0, 1, 1, 3)
+        self._layout.addWidget(play_stream_button, 0, 4)
+
         for ind, stream in enumerate(streams):
             row = ind % n_rows + 1
             col = ind // n_rows
