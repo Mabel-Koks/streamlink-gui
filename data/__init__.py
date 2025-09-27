@@ -3,8 +3,9 @@ from enum import Enum
 from typing import NamedTuple, Self, Any
 from pathlib import Path
 import json
-from subprocess import run, CalledProcessError
+import time
 
+from PyQt6.QtCore import QProcess
 from .exceptions import ParseError, NoStreamError, UnsupportedError, ImpossibleError
 
 
@@ -38,7 +39,7 @@ class Source(Enum):
     Twitch = "twitch"
     Youtube = "youtube"
 
-    def URI_root(self) -> str:
+    def URL_root(self) -> str:
         """Returns the base of the URL for the stream source.
 
         Returns:
@@ -53,6 +54,35 @@ class Source(Enum):
                 raise ImpossibleError(
                     f"encountered impossible value for source: `{self}`"
                 )
+
+    def URL_template(self) -> str:
+        """Return the stream URL template for the source.
+
+        The template always contains a 'root' and 'name' field. The 'root'
+        field forms the root of the URL (as returned by :func:`URL_root`),
+        while the name is the reference to the streamer (ie the part of the
+        link that differs between streams).
+
+        Returns:
+            str: Template stream URL with 'root' and 'name' fields.
+        """
+        match self:
+            case Source.Twitch:
+                return "https://{root}{name}"
+            case Source.Youtube:
+                return "https://{root}@{name}"
+
+    def build_URL(self, name: str) -> str:
+        """Return a complete URL for a given streamer name.
+
+        Args:
+            name (str): Name of the streamer account.
+
+        Returns:
+            str: Complete URL pointing to the stream.
+        """
+        root = self.URL_root()
+        return self.URL_template().format(root=root, name=name)
 
     @classmethod
     def from_string(cls, str_val: str) -> Self:
@@ -90,32 +120,10 @@ class RegisteredStream(NamedTuple):
     stream_name: str
     icon: str | None = None
 
-    def start(self):
-        """Start a stream using `streamlink`.
-
-        Raises:
-            NoStreamError: Stream failed to start.
-        """
-        try:
-            run(
-                [
-                    "streamlink",
-                    self.full_URI,
-                    "best",
-                ],
-                check=True,
-            )
-        except CalledProcessError as err:
-            # Maybe pass through more information.
-            raise NoStreamError(
-                f"Could not start stream for {self.display_name} @ {self.full_URI}",
-                (self,),
-            ) from None
-
     @property
-    def full_URI(self):
+    def full_URL(self):
         """The complete URL pointing to the stream source."""
-        return self.source.URI_root() + self.stream_name
+        return self.source.build_URL(self.stream_name)
 
     @classmethod
     def from_config(cls, config: dict[str, str]) -> Self:
@@ -208,7 +216,7 @@ class RegisteredStream(NamedTuple):
         if not isinstance(other, self.__class__):
             return NotImplemented
 
-        return self.full_URI == other.full_URI
+        return self.full_URL == other.full_URL
 
 
 class Connection(ABC):
