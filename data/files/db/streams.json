@@ -14,7 +14,8 @@
     {
         "stream_name": "dave_aoe",
         "source": "twitch",
-        "display_name": "Dave"
+        "display_name": "Dave",
+        "icon": "dave_icon.png"
     },
     {
         "stream_name": "impulsesv",
@@ -24,11 +25,14 @@
     },
     {
         "stream_name": "pearlescentmoon",
-        "source": "twitch"
+        "source": "twitch",
+        "display_name": "PearlescentMoon",
+        "icon": "pearl_icon.png"
     },
     {
-        "stream_name": "scrapie",
+        "stream_name": "wirtual",
         "source": "twitch",
-        "display_name": "Scrapie"
+        "display_name": "Wirtual",
+        "icon": "wirtual_icon.png"
     }
 ]
