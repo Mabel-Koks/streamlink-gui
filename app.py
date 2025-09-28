@@ -12,16 +12,23 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QVBoxLayout,
     QPlainTextEdit,
+    QAbstractButton,
 )
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
-from PyQt6.QtCore import Qt, QProcess
+from PyQt6.QtCore import Qt, QProcess, QThread, pyqtSignal
 from .data import RegisteredStream, Connection
 from .data.exceptions import NoStreamError, ParseError
 
 
 class LogDialog(QDialog):
+    """Dialog displaying an error log in a text field.
 
-    def __init__(self, error, parent=None):
+    Args:
+        error (Exception): The error to display.
+        parent (QWidget, optional): Parent object. Defaults to None.
+    """
+
+    def __init__(self, error: Exception, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("Logs")
 
@@ -43,7 +50,23 @@ class LogDialog(QDialog):
 
 class ErrorDialog(QDialog):
 
-    def __init__(self, error_message, error, extra_buttons=[], parent=None):
+    def __init__(
+        self,
+        error_message: str,
+        error: Exception,
+        extra_buttons: list[tuple[QAbstractButton, QDialogButtonBox.ButtonRole]] = [],
+        parent: QWidget | None = None,
+    ):
+        """Dialog displaying an error message, with buttons for error logs and optional
+        extra buttons for extra functionality.
+
+        Args:
+            error_message (str): The message to display.
+            error (Exception): The exception source of the error.
+            extra_buttons (list[tuple[QAbstractButton, QDialogButtonBox.ButtonRole]], optional):
+                List of extra buttons and their roles. Defaults to [].
+            parent (QWidget | None, optional): Parent object. Defaults to None.
+        """
         super().__init__(parent)
         self.setWindowTitle("Error...")
 
@@ -104,12 +127,12 @@ class NewStreamDialog(QDialog):
         )
 
         self.buttonBox = QDialogButtonBox(QBtn)
-        self.buttonBox.accepted.connect(self.parse_response)
+        self.buttonBox.accepted.connect(self._parse_response)
         self.buttonBox.rejected.connect(self.reject)
         layout.addWidget(self.buttonBox, 4, 0, 1, 3)
         self.setLayout(layout)
 
-    def parse_response(self):
+    def _parse_response(self):
         url = self._URL_field.text()
         display_name = self._name_field.text()  # May be empty
         icon_path = self._icon_button._file  # May be None
@@ -126,12 +149,12 @@ class FileDialogButton(QPushButton):
         parent (QWidget | None): parent widget, optional. Defaults to None.
     """
 
-    def __init__(self, button_text, parent=None):
+    def __init__(self, button_text: str, parent: QWidget | None = None):
         super().__init__(button_text, parent=parent)
-        self.clicked.connect(self.click_action)
+        self.clicked.connect(self._click_action)
         self._file = None
 
-    def click_action(self):
+    def _click_action(self):
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         file_dialog.setNameFilter("Images (*.png *.jpg)")
@@ -144,6 +167,7 @@ class NewStreamButton(QPushButton):
 
     Args:
         connection (Connection): connection to the data, to register the new stream to.
+        update_fn (Callable): function called when a new stream has successfully been registered.
         parent (QWidget | None): parent widget, optional. Defaults to None.
     """
 
@@ -151,108 +175,128 @@ class NewStreamButton(QPushButton):
         super().__init__("Add Stream!", parent=parent)
         self._connection = connection
         self._update_fn = update_fn
-        self.clicked.connect(self.click_action)
+        self.clicked.connect(self._click_action)
 
-    def click_action(self):
+    def _click_action(self):
         dialog_box = NewStreamDialog(self._connection, self.parent())
         if dialog_box.exec():
             self._update_fn()
 
 
-class SRStatus:
+class StreamRunner(QThread):
+    """Runs the stream starting process in a separate thread.
 
-    NOT_STARTED = 0
+    Start the runner using :func:`start()`. This will call the right methods.
+
+    Args:
+        stream (RegisteredStream): The stream to start.
+        wait (int): Time to wait inbetween tries.
+    """
+
+    # streamrunner states, these are communicated over the stream_status signal.
+    STARTING = 0
     RUNNING = 1
-    RETRYING = 2
-    STREAM_NOT_AVAILABLE = 3
-    FINISHED = 4
+    NO_STREAM = 2
+    FINISHED = 3
 
-    def __init__(self, status, extra_info=None):
-        self._status = status  # should be one of the above
-        self._extra_info = extra_info
+    stream_status = pyqtSignal(int)
 
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self._status == other._status
-        if isinstance(other, int):
-            return self._status == other
-        return NotImplemented
-
-    @property
-    def extra_info(self):
-        return self._extra_info
-
-    @extra_info.setter
-    def extra_info(self, value):
-        self._extra_info = value
-
-    @classmethod
-    def not_started(cls, extra=None):
-        return cls(cls.NOT_STARTED, extra)
-
-    @classmethod
-    def running(cls, extra=None):
-        return cls(cls.RUNNING, extra)
-
-    @classmethod
-    def not_available(cls, extra=None):
-        return cls(cls.STREAM_NOT_AVAILABLE, extra)
-
-    @classmethod
-    def finished(cls, extra=None):
-        return cls(cls.FINISHED, extra)
-
-
-class StreamRunner(QProcess):
-
-    def __init__(self, stream: RegisteredStream, status=None, parent=None):
-        super().__init__(parent)
-        if status is None:
-            status = SRStatus.not_started()
-        self._status = status
+    def __init__(self, stream: RegisteredStream, wait: int = 60):
+        super().__init__()
         self._stream = stream
-        self.setProgram("streamlink")
-        self.setArguments([self._stream.full_URL, "best"])
-        self.readyReadStandardOutput.connect(self.handle_stdout)
-        self.finished.connect(self.ended)
+        self._process = None
+        self._stop = False
+        self._start_time = time.time()
+        self._wait = wait
 
     def run(self):
-        print("trying to start stream...")
-        self.start()
-        self.waitForStarted(-1)
-        self._status = SRStatus.running(self._status.extra_info)
+        """Sets up the process and keeps trying until :func:`stop()` is called.
 
-    def handle_stdout(self):
-        data = self.readAllStandardOutput().data()
-        stdout = data.decode("utf8")
-        if "error" in stdout:
-            self._status = SRStatus.not_available(self._status.extra_info)
+        Don't call this directly or it'll block the thread. Call :func:`start()`
+        instead, which will run this in a new thread.
+        """
+        self._stop = False
+        self._start_time = time.time()
+        self.stream_status.emit(StreamRunner.STARTING)
+        self._process = QProcess()
+        self._process.setProgram("streamlink")
+        self._process.setArguments([self._stream.full_URL, "best"])
+        while not self._stop:
+            self._process.start()
+            self.stream_status.emit(StreamRunner.RUNNING)
+            self._process.waitForFinished(-1)
+            data = self._process.readAllStandardOutput().data().decode()
+            if "error" in data:
+                self.stream_status.emit(StreamRunner.NO_STREAM)
+            elif "Starting player" in data:
+                self.stream_status.emit(StreamRunner.FINISHED)
+                self.stop()
+            time.sleep(self._wait)  # don't *immediately* retry
+        self.stream_status.emit(StreamRunner.FINISHED)
 
-    def set_status(self, status):
-        self._status = status
+    def stop(self):
+        """Signal the thread to stop trying to start the stream."""
+        self._stop = True
 
-    def ended(self):
-        if self._status == SRStatus.not_available():
-            if self._status.extra_info is None:
-                print("tried to start stream once, it failed")
-                keep_trying = QPushButton("Keep Trying")
-                err_dialog = ErrorDialog(
-                    "Stream is unavailable",
-                    NoStreamError(),
-                    [(keep_trying, QDialogButtonBox.ButtonRole.AcceptRole)],
-                    self.parent(),
-                )
-                keep_trying.clicked.connect(err_dialog.accept)
-                if err_dialog.exec():
-                    self.set_status(SRStatus.not_available(time.time() + 60))
+    @property
+    def start_time(self):
+        """Timestamp when the process was started."""
+        return self._start_time
 
-            if self._status.extra_info is not None and time.time() >= self._status.extra_info:  # type: ignore
-                print("tried starting stream for a while, it failed.")
-                self._status = SRStatus.finished()
-            else:
-                self.run()
-        else:
-            self._status = SRStatus.finished()
+
+class StopRunnerDialog(QDialog):
+    """Dialog that shows for how long the StreamRunner will keep retrying
+    and allows to abort the StreamRunner process.
+
+    Args:
+        runner (StreamRunner): The StreamRunner trying to start a stream.
+        time_to_try (int | float): Seconds left to try.
+        parent (QWidget | None, optional): Parent widget. Defaults to None.
+    """
+
+    def __init__(
+        self,
+        runner: StreamRunner,
+        time_to_try: int | float,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self._runner = runner
+        self._time_left = int(time_to_try / 60)
+        self._text_template = "Retrying for another {} minute{}..."
+
+        self.setWindowTitle("Abort?")
+
+        layout = QVBoxLayout()
+        self._text = QLabel(
+            self._text_template.format(
+                self._time_left, "s" if self._time_left > 1 else ""
+            )
+        )
+        layout.addWidget(self._text)
+
+        buttonbox = QDialogButtonBox(QDialogButtonBox.StandardButton.Abort)
+        buttonbox.rejected.connect(self._abort)
+        layout.addWidget(buttonbox)
+
+        self.setLayout(layout)
+
+    def _abort(self):
+        self._runner.stop()
+        self.reject()
+
+    def set_time(self, value):
+        """Update the time left to try."""
+        self._time_left = int(value / 60)
+        self._text.setText(
+            self._text_template.format(
+                self._time_left, "s" if self._time_left > 1 else ""
+            )
+        )
+
+    def end_dialog(self):
+        """Forcibly close the dialog."""
+        self.reject()
 
 
 class StreamButton(QPushButton):
@@ -266,18 +310,51 @@ class StreamButton(QPushButton):
     def __init__(self, stream: RegisteredStream, parent=None):
 
         super().__init__(stream.display_name, parent=parent)
+        self._timeout = 3600
+        self._run_status = 0
         self._stream = stream
-        self._runner = StreamRunner(stream, parent=self)
+        self._runner = StreamRunner(stream)
+        self._runner.stream_status.connect(self._stream_handler)
         self._pixmap = self._create_pixmap()
         self.clicked.connect(self.click_action)
+
+    def _stream_handler(self, value):
+        print(value)
+        now = time.time()
+        match value:
+            case StreamRunner.STARTING:
+                self._run_status = 0
+            case StreamRunner.NO_STREAM:
+                try_until = self._runner.start_time + self._timeout
+                if self._run_status == 0:
+                    self._run_status = StopRunnerDialog(
+                        self._runner, try_until - now, parent=self
+                    )
+                    self._run_status.exec()
+                if try_until <= now:
+                    if isinstance(self._run_status, StopRunnerDialog):
+                        self._run_status.end_dialog()
+                    self._runner.stop()
+                    err_msg = f"Failed to start stream after {self._timeout} seconds"
+                    ErrorDialog(
+                        err_msg,
+                        NoStreamError(err_msg, (self._stream,)),
+                        parent=self,
+                    ).exec()
+                else:
+                    if isinstance(self._run_status, StopRunnerDialog):
+                        self._run_status.set_time(try_until - now)
+            case StreamRunner.FINISHED:
+                if isinstance(self._run_status, StopRunnerDialog):
+                    self._run_status.end_dialog()
+                self._run_status = 0
 
     def paintEvent(self, event):  # type: ignore
         painter = QPainter(self)
         painter.drawPixmap(event.rect(), self._pixmap)
 
     def click_action(self):
-        print("starting stream")
-        self._runner.run()
+        self._runner.start()
 
     def _create_pixmap(self):
         if (icon_path := self._stream.get_icon_path()) is not None:

@@ -25,5 +25,10 @@
     {
         "stream_name": "pearlescentmoon",
         "source": "twitch"
+    },
+    {
+        "stream_name": "scrapie",
+        "source": "twitch",
+        "display_name": "Scrapie"
     }
 ]

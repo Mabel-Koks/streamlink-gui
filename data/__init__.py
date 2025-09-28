@@ -6,7 +6,7 @@ import json
 import time
 
 from PyQt6.QtCore import QProcess
-from .exceptions import ParseError, NoStreamError, UnsupportedError, ImpossibleError
+from .exceptions import ParseError, UnsupportedError, ImpossibleError
 
 
 def get_file_path(filename: str) -> Path:
